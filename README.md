@@ -1,239 +1,242 @@
-# 📈 基金投资管家 FundTrader
+# 📈 FundTrader — Your AI Investment Co-pilot
 
-> 你的 AI 投资副驾驶。记录每一笔操作，看懂每一分盈亏，让 AI 帮你分析决策 —— 最终由你拍板。
+> Track every trade. Understand every cent. Let AI analyze and advise — **you make the final call.**
 
----
-
-## 这是什么
-
-在支付宝买了基金，每天打开看一眼红绿数字，却不知道到底赚了多少、该不该加仓、要不要止损？
-
-**FundTrader** 是一个本地运行的基金投资管理工具。它连接天天基金/东方财富公开数据，帮你做三件事：
-
-1. **记录 & 跟踪** — 录入你的每笔交易，自动拉净值算盈亏，一目了然
-2. **数据采集** — 每天定时拉取大盘指数、热门板块、财经新闻，All in one place
-3. **AI 分析** — 把持仓+大盘+新闻+你的风险偏好，生成结构化 Prompt，交给 AI Agent 给出具体操作建议
-
-> 💡 **和其他工具的区别**：FundTrader 不只是帮你「看数据」，更设计了完整的 **AI Agent 接口**和**操作手册**，让你可以派一个 AI 分身每天帮你盯着市场、分析持仓、写出建议。建议是否采纳，由你决定。
+*[中文文档](README_CN.md)*
 
 ---
 
-## 🚀 快速开始
+## What is this?
 
-### 环境要求
+You bought some mutual funds on Alipay. Every day you check the red and green numbers, but you're not sure: Am I actually making money? Should I add more? Time to cut losses?
+
+**FundTrader** is a locally-run fund investment management tool. It connects to public Chinese fund market data and helps you do three things:
+
+1. **Track & Monitor** — Record every trade, auto-fetch NAVs, calculate real-time P&L
+2. **Data Collection** — Auto-collect market indices, sector performance, financial news daily
+3. **AI Analysis** — Generate structured analysis prompts combining your portfolio, market data, news, and risk preferences. Feed them to any AI Agent for **dollar-precise** trading advice.
+
+> 💡 **What makes FundTrader different**: It's not just a data dashboard. It's designed as a **data infrastructure for AI Agents** — complete with REST APIs, scheduled data collection, and an Agent operations manual. Give an AI agent the big picture every morning, and it'll tell you exactly what to buy, sell, or hold.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
 
 - Python 3.9+
 - Node.js 18+
-- 可以访问天天基金和东方财富网站（国内网络即可）
+- Internet access to Chinese fund data APIs (works from mainland China)
 
-### 一行命令（推荐）
+### One-Command Setup (via AI Agent)
 
-把这个复制给 [Claude Code](https://claude.ai/code) 或你的 AI Agent：
+Copy this to [Claude Code](https://claude.ai/code) or your AI agent:
 
 ```
-帮我安装并启动这个项目：https://github.com/Fibonaccishen/fundTrader
+Help me install and start this project: https://github.com/Fibonaccishen/fundTrader
 
-步骤：
-1. cd 到项目目录
+Steps:
+1. cd to the project directory
 2. cd backend && pip install -r requirements.txt
 3. cd ../frontend && npm install
-4. 分别启动后端（uvicorn app.main:app --port 8000）和前端（npm run dev）
-5. 打开 http://localhost:5173 确认可以访问
+4. Start backend: cd backend && uvicorn app.main:app --port 8000 --reload
+5. Start frontend: cd frontend && npm run dev
+6. Open http://localhost:5173 and confirm it works
 
-如果任何步骤报错，请诊断并修复。
+If any step fails, diagnose and fix it — don't just tell me the error.
 ```
 
-### 手动启动
+### Manual Setup
 
 ```bash
-# 后端
+# Backend
 cd backend
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# 前端（新开一个终端）
+# Frontend (new terminal)
 cd frontend
 npm install
 npm run dev
 ```
 
-浏览器打开 **http://localhost:5173** 即可使用。
-API 文档：**http://localhost:8000/docs**
+Open **http://localhost:5173** in your browser.
+API docs: **http://localhost:8000/docs**
 
 ---
 
-## 🌟 功能展示
+## 🌟 Features
 
-### 📊 概览 Dashboard
+### 📊 Dashboard
 
-一屏看完所有关键信息：总市值、累计盈亏、今日盈亏、剩余可用资金。市值走势图、策略分布饼图、基金持仓占比饼图。
+One screen, everything you need: total market value, cumulative P&L, today's P&L, available cash. Market value trend chart, strategy allocation pie chart, fund allocation pie chart.
 
-### 💰 持仓管理
+### 💰 Portfolio Management
 
-每只基金一张卡片：当前净值、市值、盈亏、日涨跌幅。点击卡片进入详情页 —— **180 天净值走势图**上标注了你的买卖时点（红钉买入/绿钉卖出）。所有交易记录可编辑、可删除。
+Each fund has a card: current NAV, market value, P&L, daily change %. Click into a fund detail page — **180-day NAV trend chart** with buy/sell markers (red pins for buys, green for sells). Every transaction is editable and deletable.
 
-卡片上直接**加仓/减仓**，弹窗一键录入，不需跳转页面。
+**Quick buy/sell** directly from the card — no page switching needed.
 
-### 🤖 AI 每日分析（核心功能）
+### 🤖 AI Daily Analysis (Core Feature)
 
-点「**刷新数据+分析**」按钮，系统自动：
-1. 拉取所有持仓最新净值
-2. 采集今日大盘指数、热门板块涨跌
-3. 抓取最新财经新闻（含摘要）
-4. 读取你的风险偏好、止盈止损线、个人意见
-5. **生成一份 2500+ 字的结构化分析提示词**
+Click "**Refresh + Analyze**" and the system automatically:
+1. Pulls the latest NAVs for all holdings
+2. Collects today's market indices and sector performance
+3. Fetches the latest financial news with summaries
+4. Reads your risk tolerance, stop-profit/stop-loss thresholds, and personal notes
+5. **Generates a 2,500+ character structured analysis prompt**
 
-提示词包含：
-- 用户资金全貌（总本金/已投入/剩余可用/总盈亏）
-- 每只持仓的成本/市值/盈亏明细
-- 四大指数实时数据
-- 热门板块涨跌
-- 近期新闻标题+摘要
-- **7 个新闻查询渠道**（告诉 AI 去哪里查最新消息）
-- 风控规则（止盈+12%/止损-7%，可自定义）
-- 用户个人意见（你写的想法会同步给 AI）
-- **要求 AI 给出精确到元的操作建议**
-- 指明 AI 不必盲从用户意见，是专业基金经理
+The prompt includes:
+- Complete financial snapshot (total capital / invested / available / P&L)
+- Per-holding cost / market value / P&L breakdown
+- Real-time data for 4 major indices
+- Hot sector performance
+- Recent news headlines with summaries
+- **7 news research sources** (tells AI where to find the latest info)
+- Risk management rules (custom stop-profit +12% / stop-loss -7%)
+- Your personal investment opinions
+- **Requires AI to give yuan-precise trade recommendations**
+- Explicitly tells AI: "You are an experienced fund manager — override user if needed"
 
-**一键复制**提示词 → 发给 ChatGPT / Claude → 得到具体建议。
+**One-click copy** the prompt → paste to ChatGPT / Claude → get specific advice.
 
-### 🔍 关注列表
+### 🔍 Watchlist
 
-想买还在观望的基金？加入关注列表。每只显示 30 天迷你走势图，随时一键跳转买入。
+Funds you're considering but haven't bought yet. Add them to your watchlist. Each shows a 30-day mini trend chart. One click to jump to the buy page.
 
-### ⚠️ 风险分析
+### ⚠️ Risk Analysis
 
-自动识别持仓板块集中度。你的持仓 97% 在半导体/芯片？系统会红色警告：“过度集中！建议分散”。
+Automatic sector concentration detection. 97% of your portfolio in semiconductors/chips? The system flags it in red: "Over-concentrated! Consider diversifying."
 
-### 📉 市场估值
+### 📉 Market Valuation
 
-沪深300 / 中证500 / 创业板指 的当前 PE 和历史分位，一眼看出市场是贵还是便宜。低估绿 / 正常黄 / 高估红。
+PE percentile data for CSI 300 / CSI 500 / ChiNext. Green = undervalued, yellow = fair, red = overvalued. Know whether the market is cheap or expensive at a glance.
 
-### 📰 市场行情
+### 📰 Market Data
 
-四大指数实时行情 + AI/芯片/新能源等热门板块涨跌 + 15 条财经新闻。
+Real-time quotes for 4 major indices + 7 hot sector performances + 15 financial news headlines.
 
-### ⏰ 定时自动化
+### ⏰ Automated Scheduling
 
-系统后台全天自动运行：
-- 交易日 15:30 拉取持仓净值
-- 盘中每 5 分钟更新估算净值
-- 盘后采集指数、板块、新闻
-- 18:00 生成每日组合汇总
-- 每周日自动清理旧数据
-
----
-
-## 🏗️ 功能一览
-
-| 模块 | 功能 |
-|------|------|
-| **概览 Dashboard** | 市值/盈亏卡片、走势图、策略&持仓饼图、剩余资金 |
-| **持仓管理** | 买入/卖出/编辑/删除、实时盈亏、加仓减仓弹窗 |
-| **基金详情** | 180 天净值走势图（标注买卖时点）、完整交易记录 |
-| **AI 每日分析** | 一键生成结构化分析 Prompt，含资金/持仓/大盘/新闻/风控 |
-| **关注列表** | 自选基金跟踪，30 天迷你走势图，一键买入 |
-| **风险分析** | 板块集中度检测，多级预警 |
-| **市场估值** | 沪深300/中证500/创业板 PE 分位，低估/正常/高估 |
-| **市场行情** | 四大指数 + 7 大热门板块 + 财经新闻 |
-| **资金管理** | 总本金 - 持仓成本 = 剩余可用，全自动计算 |
-| **Agent API** | `/api/agent/*` 专用接口 + 完整操作手册 |
-| **定时任务** | 净值/指数/板块/新闻每日自动采集 |
+Runs 24/7 in the background:
+- NAV updates at 15:30 on trading days
+- Real-time NAV estimates every 5 minutes during market hours
+- Index, sector, and news collection after market close
+- Daily portfolio summary at 18:00
+- Weekly data cleanup on Sundays
 
 ---
 
-## 📂 项目结构
+## 🏗️ Feature Overview
+
+| Module | Capabilities |
+|--------|-------------|
+| **Dashboard** | P&L cards, trend chart, strategy & fund pie charts, available cash |
+| **Portfolio** | Buy/sell/edit/delete trades, real-time P&L, quick add/reduce position dialogs |
+| **Fund Detail** | 180-day NAV trend (with trade markers), full transaction history |
+| **AI Daily Analysis** | One-click structured prompt generation: portfolio + market + news + risk rules |
+| **Watchlist** | Track candidate funds, 30-day mini charts, one-click buy |
+| **Risk Analysis** | Sector concentration detection, multi-level warnings |
+| **Market Valuation** | CSI 300 / CSI 500 / ChiNext PE percentiles, under/overvalued labels |
+| **Market Data** | 4 indices + 7 sectors + financial news |
+| **Capital Management** | Total capital - position costs = available cash, auto-calculated |
+| **Agent API** | `/api/agent/*` endpoints + complete operations manual |
+| **Scheduled Tasks** | NAV / index / sector / news auto-collection daily |
+
+---
+
+## 📂 Project Structure
 
 ```
 fundTrader/
 ├── backend/app/
-│   ├── main.py              # FastAPI 入口 + 8 个定时任务
-│   ├── models/              # 10 张数据表
-│   ├── routers/             # 6 个路由模块
-│   ├── services/            # 基金数据 / 盈亏计算
-│   ├── scheduler/           # APScheduler 定时任务
-│   └── utils/               # JS/JSONP 解析器
+│   ├── main.py              # FastAPI entry + 8 scheduled jobs
+│   ├── models/              # 10 database tables
+│   ├── routers/             # 6 route modules
+│   ├── services/            # Fund data fetching / P&L calculation
+│   ├── scheduler/           # APScheduler job definitions
+│   └── utils/               # JS/JSONP response parser
 ├── frontend/src/
-│   ├── views/               # 6 个页面
-│   ├── components/          # 导航 / 持仓卡片
-│   ├── router/ api/ stores/ # 路由 / Axios / Pinia
-├── docs/AGENT_MANUAL.md     # AI Agent 操作手册
-└── data/                    # SQLite 数据库（本地）
+│   ├── views/               # 6 pages
+│   ├── components/          # Nav + Holding card
+│   ├── router/ api/ stores/ # Vue Router / Axios / Pinia
+├── docs/AGENT_MANUAL.md     # AI Agent operations manual (Chinese)
+└── data/                    # SQLite database (local only)
 ```
 
-## 🛠️ 技术栈
+## 🛠️ Tech Stack
 
-| 层 | 选型 |
-|---|---|
-| 后端 | Python + FastAPI + SQLAlchemy 2.0 (async) |
-| 数据库 | SQLite（零配置，文件即数据库） |
-| 定时任务 | APScheduler（嵌入进程，不依赖 Redis） |
-| 前端 | Vue 3 + Vite + Element Plus + ECharts |
-| 数据源 | 天天基金 / 东方财富 / 新浪财经 |
-
----
-
-## 🔌 数据源
-
-| 数据 | 来源 |
-|------|------|
-| 基金实时估值 | `fundgz.1234567.com.cn` (天天基金) |
-| 基金列表/档案 | `fund.eastmoney.com` (东方财富) |
-| 历史净值走势 | `fund.eastmoney.com/pingzhongdata` |
-| 市场指数行情 | `push2.eastmoney.com` |
-| 财经新闻 | `feed.mix.sina.com.cn` (新浪财经) |
-
-> 所有数据存储在本地 `data/fundtrader.db` SQLite 文件中，不上传任何个人信息。
+| Layer | Choice |
+|-------|--------|
+| Backend | Python + FastAPI + SQLAlchemy 2.0 (async) |
+| Database | SQLite (zero-config, file-based) |
+| Scheduler | APScheduler (embedded, no Redis needed) |
+| Frontend | Vue 3 + Vite + Element Plus + ECharts |
+| Data Sources | TianTian Fund / EastMoney / Sina Finance |
 
 ---
 
-## 🤖 AI Agent 集成
+## 🔌 Data Sources
 
-这是 FundTrader 区别于其他基金工具的核心设计。你不需要手动分析数据 —— 让 AI 帮你：
+| Data | Source |
+|------|--------|
+| Real-time fund NAV estimates | `fundgz.1234567.com.cn` (TianTian Fund) |
+| Fund master data & list | `fund.eastmoney.com` (EastMoney) |
+| Historical NAV trends | `fund.eastmoney.com/pingzhongdata` |
+| Market index quotes | `push2.eastmoney.com` |
+| Financial news | `feed.mix.sina.com.cn` (Sina Finance) |
 
-1. 系统每天自动采集所有数据
-2. 你打开 Dashboard，点「一键分析」或「刷新数据+分析」
-3. 复制生成的 Prompt，发给 Claude / ChatGPT / 任何 LLM
-4. AI 基于你的持仓、大盘、新闻、风险偏好，给出**精确到元的操作建议**
-
-详细操作流程见 **[AGENT_MANUAL.md](docs/AGENT_MANUAL.md)**。
-
----
-
-## 📋 路线图
-
-### 已完成
-
-- [x] 基金持仓管理（买入/卖出/编辑/删除）
-- [x] 自动拉取净值数据，实时计算盈亏
-- [x] 净值走势图 + 买卖时点标注
-- [x] Dashboard 概览（卡片 + 走势图 + 饼图）
-- [x] AI 每日分析（一键生成结构化 Prompt）
-- [x] 资金统一管理（总本金 - 持仓成本 = 剩余可用）
-- [x] 自定义止盈止损线 + 风险偏好 + 个人意见
-- [x] 风险分析（板块集中度检测）
-- [x] 关注列表（迷你走势图 + 一键买入）
-- [x] 市场估值（PE 分位）
-- [x] 市场行情（指数 + 板块 + 新闻）
-- [x] 定时自动化采集
-- [x] Agent API + 操作手册
-
-### 计划中
-
-- [ ] 持仓穿透（底层股票重叠分析）
-- [ ] 模拟盘 / 策略回测（DCA 定投验证）
-- [ ] 智能选基（基于多维度评分）
-- [ ] 微信小程序版
-- [ ] 真正的 AI Agent 自动调用（不只是生成 Prompt）
+> All data is stored locally in `data/fundtrader.db`. No personal information is ever uploaded.
 
 ---
 
-## ⚖️ 设计原则
+## 🤖 AI Agent Integration
 
-- **工具辅助，用户决定**：分析、建议都可以给，但买卖由你决定
-- **数据透明**：每一项计算过程可见、可验证
-- **无后端 AI**：不偷偷调用任何 LLM API，AI 功能通过生成 Prompt 让用户自行处理
-- **本地优先**：所有数据存本地 SQLite，不需要注册账号、不上传个人信息
+This is the core differentiator of FundTrader. You don't need to analyze data manually — let AI do it:
+
+1. The system auto-collects all data daily
+2. Open Dashboard, click "Refresh + Analyze" (or "Quick Analyze")
+3. Copy the generated prompt, send to Claude / ChatGPT / any LLM
+4. AI gives you **yuan-precise buy/sell/hold recommendations** based on your actual holdings, market conditions, news, and risk preferences
+
+For detailed workflow, see **[AGENT_MANUAL.md](docs/AGENT_MANUAL.md)** (in Chinese).
+
+---
+
+## 📋 Roadmap
+
+### Done
+
+- [x] Portfolio management (buy/sell/edit/delete)
+- [x] Auto NAV fetching & real-time P&L calculation
+- [x] NAV trend chart with buy/sell markers
+- [x] Dashboard (summary cards + trend chart + pie charts)
+- [x] AI daily analysis (structured prompt generation)
+- [x] Unified capital management (auto-calculated available cash)
+- [x] Custom stop-profit/stop-loss + risk tolerance + personal notes
+- [x] Risk analysis (sector concentration)
+- [x] Watchlist (mini trend charts + one-click buy)
+- [x] Market valuation (PE percentiles)
+- [x] Market data (indices + sectors + news)
+- [x] Scheduled automation
+- [x] Agent API + operations manual
+
+### Planned
+
+- [ ] Portfolio drilling (overlapping underlying stock analysis)
+- [ ] Paper trading / strategy backtesting (DCA verification)
+- [ ] Smart fund picker (multi-dimensional scoring)
+- [ ] WeChat Mini Program
+- [ ] Native AI Agent auto-invocation (not just prompt generation)
+
+---
+
+## ⚖️ Design Principles
+
+- **Tool assists, user decides**: Analysis and advice are provided, but you make every trade decision
+- **Data transparency**: Every calculation is visible and verifiable
+- **No backend AI**: No LLM APIs are called without your knowledge. AI features work by generating prompts you send yourself
+- **Local first**: All data in local SQLite. No account registration. No data upload. No tracking.
 
 ---
 
