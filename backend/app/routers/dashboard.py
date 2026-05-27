@@ -274,6 +274,16 @@ async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
         return s
 
     for h in holdings:
+        # Find this fund's own previous trading date
+        own_prev_result = await db.execute(
+            select(NavSnapshot.nav_date)
+            .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.unit_nav.isnot(None))
+            .where(NavSnapshot.nav_date < target)
+            .order_by(NavSnapshot.nav_date.desc())
+            .limit(1)
+        )
+        own_prev_date = own_prev_result.scalar_one_or_none()
+
         today_nav_result = await db.execute(
             select(NavSnapshot.unit_nav)
             .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == target)
@@ -281,15 +291,17 @@ async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
         today_nav = today_nav_result.scalar_one_or_none()
 
         yesterday_nav = None
-        if prev_date_row:
+        yesterday_date = None
+        if own_prev_date:
             prev_nav_result = await db.execute(
                 select(NavSnapshot.unit_nav)
-                .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == prev_date_row)
+                .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == own_prev_date)
             )
             yesterday_nav = prev_nav_result.scalar_one_or_none()
+            yesterday_date = own_prev_date
 
         if today_nav and yesterday_nav:
-            shares_ytd = get_shares(h.fund_id, prev_date_row)
+            shares_ytd = get_shares(h.fund_id, yesterday_date)
             if shares_ytd > 0:
                 daily_pnl = (shares_ytd * (today_nav - yesterday_nav)).quantize(Decimal("0.01"))
                 total_daily_pnl += daily_pnl

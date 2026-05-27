@@ -165,21 +165,31 @@ onMounted(async () => { await load(); selectDate(selectedDate.value, 0) })
       </div>
       <div v-loading="detailLoading">
         <el-table :data="detailData?.details || []" stripe size="small" v-if="detailData && detailData.details.length">
-          <el-table-column prop="fund_name" label="基金" />
-          <el-table-column label="份额" width="90">
+          <el-table-column prop="fund_name" label="基金">
+            <template #default="{ row }">
+              {{ row.fund_name }}
+              <el-tag v-if="(row.fund_name || '').includes('QDII')" size="small" type="info" style="margin-left:4px">QDII</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="份额" width="80">
             <template #default="{ row }">{{ row.shares.toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column label="昨收净值" width="100">
-            <template #default="{ row }">{{ row.yesterday_nav ? row.yesterday_nav.toFixed(4) : '-' }}</template>
+          <el-table-column label="前日净值" width="100">
+            <template #default="{ row }">
+              <div>{{ row.yesterday_nav ? row.yesterday_nav.toFixed(4) : '-' }}</div>
+            </template>
           </el-table-column>
           <el-table-column label="今日净值" width="100">
             <template #default="{ row }">{{ row.today_nav.toFixed(4) }}</template>
           </el-table-column>
           <el-table-column label="当日盈亏" width="110">
             <template #default="{ row }">
-              <span :class="row.daily_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'">
+              <span :class="row.daily_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'" style="font-weight:600">
                 {{ row.daily_pnl >= 0 ? '+' : '' }}{{ row.daily_pnl.toFixed(2) }}
               </span>
+              <el-tooltip v-if="(row.fund_name || '').includes('QDII')" content="QDII基金交易日与A股不同，净值变化可能跨多个自然日" placement="top">
+                <span style="font-size:10px;color:#909399;cursor:help;margin-left:2px"> ⓘ</span>
+              </el-tooltip>
             </template>
           </el-table-column>
         </el-table>
