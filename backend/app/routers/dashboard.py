@@ -252,15 +252,34 @@ async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
     details = []
     total_daily_pnl = Decimal("0")
 
+    # Build shares history for accurate per-date calculation
+    from ..models.transaction import Transaction
+    txn_result = await db.execute(select(Transaction).order_by(Transaction.transaction_date))
+    all_txns = txn_result.scalars().all()
+    fund_shares_history = {}
     for h in holdings:
-        # Today's NAV
+        fund_shares_history[h.fund_id] = []
+    for t in all_txns:
+        if t.fund_id in fund_shares_history:
+            prev = fund_shares_history[t.fund_id][-1][1] if fund_shares_history[t.fund_id] else Decimal("0")
+            new_s = prev + t.shares if t.transaction_type == "buy" else prev - t.shares
+            fund_shares_history[t.fund_id].append((t.transaction_date, new_s))
+
+    def get_shares(fid, d):
+        hist = fund_shares_history.get(fid, [])
+        s = Decimal("0")
+        for dt, sh in hist:
+            if dt <= d: s = sh
+            else: break
+        return s
+
+    for h in holdings:
         today_nav_result = await db.execute(
             select(NavSnapshot.unit_nav)
             .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == target)
         )
         today_nav = today_nav_result.scalar_one_or_none()
 
-        # Yesterday's NAV
         yesterday_nav = None
         if prev_date_row:
             prev_nav_result = await db.execute(
@@ -269,24 +288,19 @@ async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
             )
             yesterday_nav = prev_nav_result.scalar_one_or_none()
 
-        if today_nav:
-            today_mv = h.total_shares * today_nav
-            if yesterday_nav:
-                yesterday_mv = h.total_shares * yesterday_nav
-                daily_pnl = today_mv - yesterday_mv
-            else:
-                # First day: compare to cost
-                daily_pnl = today_mv - h.total_cost
-            daily_pnl = daily_pnl.quantize(Decimal("0.01"))
-            total_daily_pnl += daily_pnl
-            details.append({
-                "fund_code": h.fund.code,
-                "fund_name": h.fund.name,
-                "shares": float(h.total_shares),
-                "today_nav": float(today_nav),
-                "yesterday_nav": float(yesterday_nav) if yesterday_nav else None,
-                "daily_pnl": float(daily_pnl),
-            })
+        if today_nav and yesterday_nav:
+            shares_ytd = get_shares(h.fund_id, prev_date_row)
+            if shares_ytd > 0:
+                daily_pnl = (shares_ytd * (today_nav - yesterday_nav)).quantize(Decimal("0.01"))
+                total_daily_pnl += daily_pnl
+                details.append({
+                    "fund_code": h.fund.code,
+                    "fund_name": h.fund.name,
+                    "shares": float(shares_ytd),
+                    "today_nav": float(today_nav),
+                    "yesterday_nav": float(yesterday_nav),
+                    "daily_pnl": float(daily_pnl),
+                })
 
     return {
         "date": query_date,
@@ -297,67 +311,123 @@ async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/daily-pnl-calendar")
 async def daily_pnl_calendar(year: int, month: int, db: AsyncSession = Depends(get_db)):
-    """Get daily P&L for a calendar month view."""
+    """Get daily P&L for a calendar month view. Calculated from NAV data directly."""
     import calendar
     from datetime import date as date_type, timedelta
 
-    # Get all daily summaries for this month
     start = date_type(year, month, 1)
     end = date_type(year, month, calendar.monthrange(year, month)[1])
-    result = await db.execute(
-        select(DailySummary)
-        .where(DailySummary.summary_date >= start, DailySummary.summary_date <= end)
-        .order_by(DailySummary.summary_date)
-    )
-    summaries = {s.summary_date: s for s in result.scalars().all()}
 
-    # Also get the last summary before this month for first-day delta calculation
-    prev_result = await db.execute(
-        select(DailySummary)
-        .where(DailySummary.summary_date < start)
-        .order_by(DailySummary.summary_date.desc())
-        .limit(1)
-    )
-    prev_summary = prev_result.scalar_one_or_none()
-    prev_mv = prev_summary.total_market_value if prev_summary else Decimal("0")
-    prev_cost = prev_summary.total_cost if prev_summary else Decimal("0")
+    # Get all active holdings
+    result = await db.execute(select(Holding).where(Holding.status == "active"))
+    holdings = result.scalars().all()
+    fund_ids = [h.fund_id for h in holdings]
 
-    # Build day-by-day data: daily_pnl = change in unrealized P&L
-    # This correctly excludes capital inflows/outflows
+    if not fund_ids:
+        days = [{"date": str(start + timedelta(days=i)), "pnl": None, "market_value": None, "pnl_pct": None} for i in range((end - start).days + 1)]
+        return {"year": year, "month": month, "days": days, "month_summary": {"total_pnl": 0, "positive_days": 0, "negative_days": 0, "best_day": None, "worst_day": None}}
+
+    # Get all NAV dates in this month's range (extended by 1 before for delta calc)
+    nav_result = await db.execute(
+        select(NavSnapshot.nav_date)
+        .where(NavSnapshot.fund_id.in_(fund_ids), NavSnapshot.unit_nav.isnot(None))
+        .where(NavSnapshot.nav_date >= start - timedelta(days=10), NavSnapshot.nav_date <= end)
+        .order_by(NavSnapshot.nav_date)
+    )
+    all_trading_dates = sorted(set(r for r in nav_result.scalars().all()))
+
+    # Pre-load NAVs for all funds on all trading dates
+    # Build: {date: {fund_id: nav}}
+    nav_map = {}
+    for nd in all_trading_dates:
+        nav_result = await db.execute(
+            select(NavSnapshot.fund_id, NavSnapshot.unit_nav)
+            .where(NavSnapshot.nav_date == nd, NavSnapshot.fund_id.in_(fund_ids), NavSnapshot.unit_nav.isnot(None))
+        )
+        nav_map[nd] = {row.fund_id: row.unit_nav for row in nav_result.all()}
+
+    # Build historical shares for each fund by date
+    from ..models.transaction import Transaction
+    txn_result = await db.execute(
+        select(Transaction).order_by(Transaction.transaction_date)
+    )
+    all_txns = txn_result.scalars().all()
+    # {fund_id: [(date, cumulative_shares), ...]}
+    fund_shares_history = {}
+    for h in holdings:
+        fund_shares_history[h.fund_id] = []
+    for t in all_txns:
+        if t.fund_id in fund_shares_history:
+            prev = fund_shares_history[t.fund_id][-1][1] if fund_shares_history[t.fund_id] else Decimal("0")
+            if t.transaction_type == "buy":
+                new_shares = prev + t.shares
+            else:
+                new_shares = prev - t.shares
+            fund_shares_history[t.fund_id].append((t.transaction_date, new_shares))
+
+    def get_shares_on_date(fund_id: int, target_date: date) -> Decimal:
+        """Get the shares held for a fund on a given date."""
+        history = fund_shares_history.get(fund_id, [])
+        if not history:
+            return Decimal("0")
+        shares = Decimal("0")
+        for d, s in history:
+            if d <= target_date:
+                shares = s
+            else:
+                break
+        return shares
+
+    # Calculate daily P&L using historical shares
+    daily_pnl_map = {}
+    for i in range(1, len(all_trading_dates)):
+        today = all_trading_dates[i]
+        yesterday = all_trading_dates[i - 1]
+        today_navs = nav_map.get(today, {})
+        yesterday_navs = nav_map.get(yesterday, {})
+        total_daily = Decimal("0")
+        for h in holdings:
+            tn = today_navs.get(h.fund_id)
+            yn = yesterday_navs.get(h.fund_id)
+            if tn and yn:
+                # Use shares as of yesterday (before today's transactions)
+                shares_yesterday = get_shares_on_date(h.fund_id, yesterday)
+                if shares_yesterday > 0:
+                    total_daily += shares_yesterday * (tn - yn)
+        daily_pnl_map[today] = total_daily.quantize(Decimal("0.01"))
+
+    # Find first transaction date
+    first_txn_date = None
+    if all_txns:
+        first_txn_date = all_txns[0].transaction_date
+
+    # Build calendar days - only show data from first transaction date
     days = []
     d = start
-    last_pnl = prev_mv - prev_cost  # unrealized P&L at end of previous period
     while d <= end:
-        s = summaries.get(d)
-        if s and s.total_market_value is not None:
-            today_pnl = (s.total_market_value or Decimal("0")) - (s.total_cost or Decimal("0"))
-            daily_pnl = today_pnl - last_pnl
-            last_mv = s.total_market_value if s.total_market_value else Decimal("0")
-            daily_pnl_pct = float(daily_pnl / last_mv * 100) if last_mv > 0 else 0
-            days.append({
-                "date": str(d),
-                "pnl": float(daily_pnl.quantize(Decimal("0.01"))),
-                "market_value": float(s.total_market_value) if s.total_market_value else 0,
-                "pnl_pct": round(daily_pnl_pct, 2),
-            })
-            last_pnl = today_pnl
+        has_holdings = first_txn_date and d >= first_txn_date
+        if d in daily_pnl_map and has_holdings:
+            pnl = daily_pnl_map[d]
+            days.append({"date": str(d), "pnl": float(pnl), "market_value": None, "pnl_pct": None})
+        elif d in nav_map and nav_map[d] and has_holdings:
+            # Trading day with NAV but no P&L (first day of holdings)
+            days.append({"date": str(d), "pnl": 0.0, "market_value": None, "pnl_pct": None})
         else:
             days.append({"date": str(d), "pnl": None, "market_value": None, "pnl_pct": None})
         d += timedelta(days=1)
 
-    # Monthly summary (only for days with data)
     trading_days = [d for d in days if d["pnl"] is not None]
     month_pnl = sum((Decimal(str(d["pnl"])) for d in trading_days), Decimal("0"))
-    positive_days = sum(1 for d in trading_days if d["pnl"] > 0)
-    negative_days = sum(1 for d in trading_days if d["pnl"] < 0)
+    positive = sum(1 for d in trading_days if d["pnl"] > 0)
+    negative = sum(1 for d in trading_days if d["pnl"] < 0)
 
     return {
         "year": year, "month": month,
         "days": days,
         "month_summary": {
             "total_pnl": float(month_pnl),
-            "positive_days": positive_days,
-            "negative_days": negative_days,
+            "positive_days": positive,
+            "negative_days": negative,
             "best_day": max(trading_days, key=lambda x: x["pnl"], default=None) if trading_days else None,
             "worst_day": min(trading_days, key=lambda x: x["pnl"], default=None) if trading_days else None,
         },

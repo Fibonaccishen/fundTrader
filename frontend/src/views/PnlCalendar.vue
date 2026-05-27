@@ -11,8 +11,8 @@ const month = ref(today.getMonth() + 1)
 const data = ref(null)
 const loading = ref(false)
 
-// Detail dialog
-const detailDialog = ref(false)
+// Selected date detail
+const selectedDate = ref(today.toISOString().slice(0, 10))
 const detailData = ref(null)
 const detailLoading = ref(false)
 
@@ -22,9 +22,10 @@ async function load() {
   catch {} finally { loading.value = false }
 }
 
-async function showDetail(date) {
+async function selectDate(date, pnl) {
+  if (pnl === null || pnl === undefined) return
+  selectedDate.value = date
   detailLoading.value = true
-  detailDialog.value = true
   detailData.value = null
   try {
     const { data: d } = await api.get('/dashboard/daily-pnl-detail', { params: { query_date: date } })
@@ -47,10 +48,10 @@ function nextMonth() {
 
 function pnlColor(pnl) {
   if (pnl === null || pnl === undefined) return '#f5f5f5'
+  if (pnl === 0) return '#fafafa'
   if (pnl > 80) return '#c6e48b'
   if (pnl > 30) return '#d4f0a5'
   if (pnl > 0) return '#e8f5d0'
-  if (pnl === 0) return '#f5f5f5'
   if (pnl > -30) return '#ffe0e0'
   if (pnl > -80) return '#ffb8b8'
   return '#ff9090'
@@ -58,18 +59,16 @@ function pnlColor(pnl) {
 
 function pnlTextColor(pnl) {
   if (pnl === null || pnl === undefined) return '#ccc'
-  return pnl >= 0 ? '#e53935' : '#4caf50'
+  if (pnl === 0) return '#999'
+  return pnl > 0 ? '#e53935' : '#4caf50'
 }
 
-// Build calendar grid
 const calendarGrid = computed(() => {
   if (!data.value) return []
   const days = data.value.days
   const firstDay = new Date(year.value, month.value - 1, 1).getDay()
   const cells = []
-  // Empty cells before first day
   for (let i = 0; i < firstDay; i++) cells.push(null)
-  // Day cells
   for (const d of days) {
     const day = parseInt(d.date.split('-')[2])
     cells.push({ day, ...d })
@@ -79,7 +78,7 @@ const calendarGrid = computed(() => {
 
 const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六']
 
-onMounted(load)
+onMounted(async () => { await load(); selectDate(selectedDate.value, 0) })
 </script>
 
 <template>
@@ -93,7 +92,6 @@ onMounted(load)
       </div>
     </div>
 
-    <!-- Monthly summary -->
     <div v-if="data" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
       <div style="background:#fff;border-radius:8px;padding:12px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
         <div style="font-size:12px;color:#909399">本月盈亏</div>
@@ -118,15 +116,10 @@ onMounted(load)
       </div>
     </div>
 
-    <!-- Calendar Grid -->
-    <div v-loading="loading" style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
-      <!-- Weekday headers -->
+    <div v-loading="loading" style="background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:20px">
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:8px">
-        <div v-for="w in weekdayLabels" :key="w" style="text-align:center;font-weight:600;font-size:13px;color:#909399;padding:8px">
-          {{ w }}
-        </div>
+        <div v-for="w in weekdayLabels" :key="w" style="text-align:center;font-weight:600;font-size:13px;color:#909399;padding:8px">{{ w }}</div>
       </div>
-      <!-- Day cells -->
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
         <div v-for="(cell, i) in calendarGrid" :key="i"
           :style="{
@@ -134,21 +127,19 @@ onMounted(load)
             borderRadius: '6px', padding: '8px 4px', minHeight: '70px',
             cursor: cell && cell.pnl !== null ? 'pointer' : 'default',
             textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          }">
+            border: cell && cell.date === selectedDate ? '2px solid #409EFF' : '2px solid transparent',
+          }"
+          @click="cell && selectDate(cell.date, cell.pnl)">
           <template v-if="cell">
             <div style="font-size:13px;font-weight:500">{{ cell.day }}</div>
-            <div v-if="cell.pnl !== null" @click.stop="showDetail(cell.date)" :style="{ color: pnlTextColor(cell.pnl), fontSize: '12px', fontWeight: '600', marginTop: '2px' }">
+            <div v-if="cell.pnl !== null" :style="{ color: pnlTextColor(cell.pnl), fontSize: '12px', fontWeight: '600', marginTop: '2px' }">
               {{ cell.pnl >= 0 ? '+' : '' }}{{ cell.pnl.toFixed(2) }}
             </div>
-            <div v-if="cell.pnl_pct !== null && cell.pnl_pct !== 0" :style="{ color: pnlTextColor(cell.pnl), fontSize: '10px', opacity: 0.7 }">
-              {{ cell.pnl_pct >= 0 ? '+' : '' }}{{ cell.pnl_pct.toFixed(2) }}%
-            </div>
             <div v-if="cell.pnl === null" style="font-size:10px;color:#ccc">休市</div>
+            <div v-if="cell.pnl === 0" style="font-size:10px;color:#999">首日</div>
           </template>
         </div>
       </div>
-
-      <!-- Legend -->
       <div style="display:flex;align-items:center;gap:8px;margin-top:16px;justify-content:center;font-size:12px">
         <span style="color:#909399">亏</span>
         <span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:#ff9090"></span>
@@ -159,19 +150,21 @@ onMounted(load)
         <span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:#d4f0a5"></span>
         <span style="display:inline-block;width:18px;height:18px;border-radius:4px;background:#c6e48b"></span>
         <span style="color:#909399">盈</span>
+        <span style="margin-left:12px;display:inline-block;width:18px;height:18px;border-radius:4px;background:#fafafa;border:1px solid #e0e0e0"></span>
+        <span style="color:#909399">首日</span>
       </div>
     </div>
 
-    <!-- Detail Dialog -->
-    <el-dialog v-model="detailDialog" :title="'每日盈亏明细' + (detailData ? ' - ' + detailData.date : '')" width="550px">
+    <!-- Detail Panel -->
+    <div style="background:#fff;border-radius:8px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.08)">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <h3 style="margin:0">{{ selectedDate }} 盈亏明细</h3>
+        <span v-if="detailData && !detailData.error" :class="detailData.total_daily_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'" style="font-size:20px;font-weight:600">
+          {{ detailData.total_daily_pnl >= 0 ? '+' : '' }}{{ detailData.total_daily_pnl.toFixed(2) }}
+        </span>
+      </div>
       <div v-loading="detailLoading">
-        <div v-if="detailData" style="text-align:center;margin-bottom:16px">
-          <span :class="detailData.total_daily_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'" style="font-size:22px;font-weight:600">
-            {{ detailData.total_daily_pnl >= 0 ? '+' : '' }}{{ detailData.total_daily_pnl.toFixed(2) }}
-          </span>
-          <span style="font-size:14px;color:#909399;margin-left:4px">当日总盈亏</span>
-        </div>
-        <el-table :data="detailData?.details || []" stripe size="small" v-if="detailData">
+        <el-table :data="detailData?.details || []" stripe size="small" v-if="detailData && detailData.details.length">
           <el-table-column prop="fund_name" label="基金" />
           <el-table-column label="份额" width="90">
             <template #default="{ row }">{{ row.shares.toFixed(2) }}</template>
@@ -190,8 +183,13 @@ onMounted(load)
             </template>
           </el-table-column>
         </el-table>
-        <div v-if="detailData && !detailData.details.length" style="text-align:center;color:#909399">该日无持仓记录</div>
+        <div v-if="detailData && !detailData.details.length && !detailData.error" style="text-align:center;color:#909399;padding:20px">
+          该日无净值变动数据（首日建仓或休市）
+        </div>
+        <div v-if="!detailData && !detailLoading" style="text-align:center;color:#909399;padding:20px">
+          点击日历中带数字的日期查看明细
+        </div>
       </div>
-    </el-dialog>
+    </div>
   </div>
 </template>
