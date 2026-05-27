@@ -25,10 +25,13 @@ async function load() {
 async function showDetail(date) {
   detailLoading.value = true
   detailDialog.value = true
+  detailData.value = null
   try {
     const { data: d } = await api.get('/dashboard/daily-pnl-detail', { params: { query_date: date } })
     detailData.value = d
-  } catch {} finally { detailLoading.value = false }
+  } catch {
+    detailData.value = { date, total_daily_pnl: 0, details: [], error: true }
+  } finally { detailLoading.value = false }
 }
 
 function prevMonth() {
