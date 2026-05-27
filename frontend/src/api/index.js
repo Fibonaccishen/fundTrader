@@ -50,6 +50,9 @@ export function getRiskAnalysis() {
 export function getMarketValuation() {
   return api.get('/dashboard/market-valuation')
 }
+export function getDailyPnlCalendar(year, month) {
+  return api.get('/dashboard/daily-pnl-calendar', { params: { year, month } })
+}
 export function getAgentSettings() {
   return api.get('/agent/settings')
 }

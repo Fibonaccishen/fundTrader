@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models.holding import Holding
 from ..schemas.schemas import HoldingOut, HoldingUpdate
-from ..services.portfolio import get_latest_nav_for_fund, calc_holding_pnl
+from ..services.portfolio import get_latest_nav_for_fund, get_yesterday_nav, calc_holding_pnl
 from ..services.fund_data import fetch_realtime_estimation
 
 router = APIRouter(prefix="/api/holdings", tags=["holdings"])
@@ -39,6 +39,10 @@ async def list_holdings(status: str = "active", db: AsyncSession = Depends(get_d
         current_nav = unit_nav or est_nav
         pnl = calc_holding_pnl(h, current_nav)
 
+        # Yesterday's confirmed P&L (matches Alipay display)
+        yesterday_nav = await get_yesterday_nav(db, h.fund_id)
+        yesterday_pnl = calc_holding_pnl(h, yesterday_nav)
+
         avg_cost = None
         if h.total_shares > 0:
             avg_cost = (h.total_cost / h.total_shares).quantize(Decimal("0.0001"))
@@ -53,8 +57,11 @@ async def list_holdings(status: str = "active", db: AsyncSession = Depends(get_d
             avg_cost_per_share=avg_cost,
             current_nav=current_nav,
             est_nav=est_nav,
+            yesterday_nav=yesterday_nav,
             market_value=pnl["market_value"],
+            yesterday_market_value=yesterday_pnl["market_value"],
             unrealized_pnl=pnl["unrealized_pnl"],
+            yesterday_pnl=yesterday_pnl["unrealized_pnl"],
             pnl_pct=pnl["pnl_pct"],
             daily_change_pct=daily_change,
             strategy_type=h.strategy_type,

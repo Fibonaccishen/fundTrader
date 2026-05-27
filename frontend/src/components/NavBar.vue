@@ -9,6 +9,7 @@ const navItems = [
   { path: '/holdings', label: '持仓' },
   { path: '/add-transaction', label: '录入交易' },
   { path: '/watchlist', label: '关注' },
+  { path: '/calendar', label: '日历' },
   { path: '/market', label: '行情' },
 ]
 </script>

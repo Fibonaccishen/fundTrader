@@ -23,6 +23,21 @@ async def get_latest_nav_for_fund(db: AsyncSession, fund_id: int) -> tuple[Decim
     return None, None, None
 
 
+async def get_yesterday_nav(db: AsyncSession, fund_id: int) -> Decimal | None:
+    """Get yesterday's confirmed unit_nav (last trading day before today)."""
+    today = date.today()
+    result = await db.execute(
+        select(NavSnapshot.unit_nav)
+        .where(NavSnapshot.fund_id == fund_id)
+        .where(NavSnapshot.unit_nav.isnot(None))
+        .where(NavSnapshot.nav_date < today)
+        .order_by(NavSnapshot.nav_date.desc())
+        .limit(1)
+    )
+    nav = result.scalar_one_or_none()
+    return nav
+
+
 def calc_holding_pnl(holding: Holding, current_nav: Decimal | None) -> dict:
     """Calculate profit/loss for a holding given current NAV."""
     if current_nav is None or holding.total_shares == 0:
@@ -51,6 +66,7 @@ async def get_dashboard_summary(db: AsyncSession) -> dict:
 
     total_cost = Decimal("0")
     total_market_value = Decimal("0")
+    yesterday_market_value = Decimal("0")
     today_pnl = Decimal("0")
     top_gainer = None
     top_loser = None
@@ -62,8 +78,13 @@ async def get_dashboard_summary(db: AsyncSession) -> dict:
         nav = est_nav or unit_nav
         pnl_info = calc_holding_pnl(h, nav)
 
+        # Yesterday's NAV for yesterday P&L
+        yesterday_nav = await get_yesterday_nav(db, h.fund_id)
+        yesterday_pnl_info = calc_holding_pnl(h, yesterday_nav)
+
         total_cost += h.total_cost
         total_market_value += pnl_info["market_value"]
+        yesterday_market_value += yesterday_pnl_info["market_value"]
 
         # Today's P&L: shares * (today's change in nav)
         if est_change is not None and nav is not None and est_change != Decimal("0"):
@@ -107,7 +128,9 @@ async def get_dashboard_summary(db: AsyncSession) -> dict:
     return {
         "total_cost": total_cost.quantize(Decimal("0.01")),
         "total_market_value": total_market_value.quantize(Decimal("0.01")),
+        "yesterday_market_value": yesterday_market_value.quantize(Decimal("0.01")),
         "total_unrealized_pnl": total_unrealized_pnl.quantize(Decimal("0.01")),
+        "yesterday_unrealized_pnl": (yesterday_market_value - total_cost).quantize(Decimal("0.01")),
         "total_pnl_pct": total_pnl_pct,
         "today_pnl": today_pnl,
         "holding_count": len(holdings),

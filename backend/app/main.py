@@ -1,9 +1,14 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# Disable system proxy for Chinese financial data APIs (fixes VPN routing issues)
+os.environ.setdefault("no_proxy", "eastmoney.com,1234567.com.cn,sina.com.cn,csindex.com.cn,legulegu.com,localhost,127.0.0.1,*.eastmoney.com,*.sina.com.cn")
+os.environ.setdefault("NO_PROXY", os.environ["no_proxy"])
 
 from .database import init_db
 from .routers import funds, holdings, transactions, dashboard, agent, watchlist

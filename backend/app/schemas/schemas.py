@@ -80,8 +80,11 @@ class HoldingOut(BaseModel):
     avg_cost_per_share: Decimal | None = None
     current_nav: Decimal | None = None
     est_nav: Decimal | None = None
+    yesterday_nav: Decimal | None = None
     market_value: Decimal | None = None
+    yesterday_market_value: Decimal | None = None
     unrealized_pnl: Decimal | None = None
+    yesterday_pnl: Decimal | None = None
     pnl_pct: Decimal | None = None
     daily_change_pct: Decimal | None = None
     strategy_type: str
@@ -99,7 +102,9 @@ class HoldingUpdate(BaseModel):
 class DashboardSummary(BaseModel):
     total_cost: Decimal
     total_market_value: Decimal
+    yesterday_market_value: Decimal
     total_unrealized_pnl: Decimal
+    yesterday_unrealized_pnl: Decimal
     total_pnl_pct: Decimal
     today_pnl: Decimal
     holding_count: int

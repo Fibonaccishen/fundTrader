@@ -136,6 +136,12 @@ async function submitTrade() {
         <div style="font-size:12px;color:#909399">
           成本 {{ Number(holding.total_cost || 0).toFixed(2) }} →
         </div>
+        <div v-if="holding.yesterday_pnl !== null && holding.yesterday_pnl !== undefined" style="font-size:11px;margin-top:2px">
+          <span :class="Number(holding.yesterday_pnl) >= 0 ? 'pnl-positive' : 'pnl-negative'">
+            昨日 {{ Number(holding.yesterday_pnl) >= 0 ? '+' : '' }}{{ Number(holding.yesterday_pnl).toFixed(2) }}
+          </span>
+          <span style="color:#c0c4cc;margin-left:4px">(支付宝)</span>
+        </div>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <el-button size="small" type="success" @click="openTrade('buy', $event)">加仓</el-button>

@@ -214,10 +214,17 @@ onMounted(async () => { await fetchData() })
         <div class="value">{{ Number(summary.total_market_value).toLocaleString() }}</div>
       </div>
       <div class="summary-card">
-        <div class="label">累计盈亏</div>
+        <div class="label">累计盈亏（实时）</div>
         <div class="value" :class="Number(summary.total_unrealized_pnl) >= 0 ? 'pnl-positive' : 'pnl-negative'">
           {{ Number(summary.total_unrealized_pnl) >= 0 ? '+' : '' }}{{ Number(summary.total_unrealized_pnl).toFixed(2) }}
         </div>
+      </div>
+      <div class="summary-card">
+        <div class="label">昨日收盘盈亏</div>
+        <div class="value" :class="Number(summary.yesterday_unrealized_pnl) >= 0 ? 'pnl-positive' : 'pnl-negative'" style="font-size:20px">
+          {{ Number(summary.yesterday_unrealized_pnl) >= 0 ? '+' : '' }}{{ Number(summary.yesterday_unrealized_pnl).toFixed(2) }}
+        </div>
+        <div style="font-size:11px;color:#c0c4cc">支付宝同款</div>
       </div>
       <div class="summary-card">
         <div class="label">收益率</div>

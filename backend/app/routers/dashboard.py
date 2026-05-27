@@ -9,6 +9,7 @@ from ..models.market_data import DailySummary, MarketIndex, SectorData
 from ..models.user_settings import UserSettings
 from ..models.holding import Holding
 from ..models.market_valuation import MarketValuation
+from ..models.nav_snapshot import NavSnapshot
 from ..schemas.schemas import DashboardSummary, MarketIndexOut, SectorOut
 from ..services.portfolio import get_dashboard_summary, get_latest_nav_for_fund
 
@@ -228,3 +229,136 @@ async def _seed_valuation(db: AsyncSession):
             pb=Decimal(str(pb)), pb_percentile=Decimal(str(pbp)),
         ))
     await db.flush()
+
+
+@router.get("/daily-pnl-detail")
+async def daily_pnl_detail(query_date: str, db: AsyncSession = Depends(get_db)):
+    """Get per-fund daily P&L breakdown for a specific date."""
+    from datetime import date as date_type, timedelta
+    target = date_type.fromisoformat(query_date)
+
+    # Find previous trading day with NAV data
+    prev_result = await db.execute(
+        select(NavSnapshot.nav_date)
+        .where(NavSnapshot.nav_date < target, NavSnapshot.unit_nav.isnot(None))
+        .order_by(NavSnapshot.nav_date.desc())
+        .limit(1)
+    )
+    prev_date_row = prev_result.scalar_one_or_none()
+
+    result = await db.execute(select(Holding).where(Holding.status == "active"))
+    holdings = result.scalars().all()
+
+    details = []
+    total_daily_pnl = Decimal("0")
+
+    for h in holdings:
+        # Today's NAV
+        today_nav_result = await db.execute(
+            select(NavSnapshot.unit_nav)
+            .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == target)
+        )
+        today_nav = today_nav_result.scalar_one_or_none()
+
+        # Yesterday's NAV
+        yesterday_nav = None
+        if prev_date_row:
+            prev_nav_result = await db.execute(
+                select(NavSnapshot.unit_nav)
+                .where(NavSnapshot.fund_id == h.fund_id, NavSnapshot.nav_date == prev_date_row)
+            )
+            yesterday_nav = prev_nav_result.scalar_one_or_none()
+
+        if today_nav:
+            today_mv = h.total_shares * today_nav
+            if yesterday_nav:
+                yesterday_mv = h.total_shares * yesterday_nav
+                daily_pnl = today_mv - yesterday_mv
+            else:
+                # First day: compare to cost
+                daily_pnl = today_mv - h.total_cost
+            daily_pnl = daily_pnl.quantize(Decimal("0.01"))
+            total_daily_pnl += daily_pnl
+            details.append({
+                "fund_code": h.fund.code,
+                "fund_name": h.fund.name,
+                "shares": float(h.total_shares),
+                "today_nav": float(today_nav),
+                "yesterday_nav": float(yesterday_nav) if yesterday_nav else None,
+                "daily_pnl": float(daily_pnl),
+            })
+
+    return {
+        "date": query_date,
+        "total_daily_pnl": float(total_daily_pnl),
+        "details": sorted(details, key=lambda x: abs(x["daily_pnl"]), reverse=True),
+    }
+
+
+@router.get("/daily-pnl-calendar")
+async def daily_pnl_calendar(year: int, month: int, db: AsyncSession = Depends(get_db)):
+    """Get daily P&L for a calendar month view."""
+    import calendar
+    from datetime import date as date_type, timedelta
+
+    # Get all daily summaries for this month
+    start = date_type(year, month, 1)
+    end = date_type(year, month, calendar.monthrange(year, month)[1])
+    result = await db.execute(
+        select(DailySummary)
+        .where(DailySummary.summary_date >= start, DailySummary.summary_date <= end)
+        .order_by(DailySummary.summary_date)
+    )
+    summaries = {s.summary_date: s for s in result.scalars().all()}
+
+    # Also get the last summary before this month for first-day delta calculation
+    prev_result = await db.execute(
+        select(DailySummary)
+        .where(DailySummary.summary_date < start)
+        .order_by(DailySummary.summary_date.desc())
+        .limit(1)
+    )
+    prev_summary = prev_result.scalar_one_or_none()
+    prev_mv = prev_summary.total_market_value if prev_summary else Decimal("0")
+    prev_cost = prev_summary.total_cost if prev_summary else Decimal("0")
+
+    # Build day-by-day data: daily_pnl = change in unrealized P&L
+    # This correctly excludes capital inflows/outflows
+    days = []
+    d = start
+    last_pnl = prev_mv - prev_cost  # unrealized P&L at end of previous period
+    while d <= end:
+        s = summaries.get(d)
+        if s and s.total_market_value is not None:
+            today_pnl = (s.total_market_value or Decimal("0")) - (s.total_cost or Decimal("0"))
+            daily_pnl = today_pnl - last_pnl
+            last_mv = s.total_market_value if s.total_market_value else Decimal("0")
+            daily_pnl_pct = float(daily_pnl / last_mv * 100) if last_mv > 0 else 0
+            days.append({
+                "date": str(d),
+                "pnl": float(daily_pnl.quantize(Decimal("0.01"))),
+                "market_value": float(s.total_market_value) if s.total_market_value else 0,
+                "pnl_pct": round(daily_pnl_pct, 2),
+            })
+            last_pnl = today_pnl
+        else:
+            days.append({"date": str(d), "pnl": None, "market_value": None, "pnl_pct": None})
+        d += timedelta(days=1)
+
+    # Monthly summary (only for days with data)
+    trading_days = [d for d in days if d["pnl"] is not None]
+    month_pnl = sum((Decimal(str(d["pnl"])) for d in trading_days), Decimal("0"))
+    positive_days = sum(1 for d in trading_days if d["pnl"] > 0)
+    negative_days = sum(1 for d in trading_days if d["pnl"] < 0)
+
+    return {
+        "year": year, "month": month,
+        "days": days,
+        "month_summary": {
+            "total_pnl": float(month_pnl),
+            "positive_days": positive_days,
+            "negative_days": negative_days,
+            "best_day": max(trading_days, key=lambda x: x["pnl"], default=None) if trading_days else None,
+            "worst_day": min(trading_days, key=lambda x: x["pnl"], default=None) if trading_days else None,
+        },
+    }
